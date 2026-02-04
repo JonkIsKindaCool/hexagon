@@ -417,7 +417,7 @@ class HexagonCLI {
 					Sys.command("chmod", ["+x", exePath]);
 				}
 
-				Sys.command('./$exeName');
+				Sys.command('"./$exeName"');
 
 			case 'jvm', 'java':
 				Sys.setCwd(Path.join([path, paths.export, target]));

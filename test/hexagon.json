@@ -1,5 +1,5 @@
 {
-    "name": "DayumBoy",
+    "name": "Hexagon Test",
     "version": "1.0.0",
     "author": "Jonk",
     "paths": {
@@ -23,9 +23,6 @@
     "dependencies":[
         {
             "name": "hscript"
-        },
-        {
-            "name": "hxsdl"
         }
     ]
 }

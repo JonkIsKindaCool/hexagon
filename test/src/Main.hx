@@ -1,34 +1,26 @@
 package;
 
-import sdl.Types.WindowPos;
-import sdl.Types.InitFlags;
-import sdl.Types.Event;
-import sdl.Types.WindowInitFlags;
-import sdl.SDL;
-import sdl.Types.Window;
+import sys.io.File;
 import hscript.Parser;
 import hscript.Interp;
+import sys.FileSystem;
 
 class Main {
 	public function new() {
-		SDL.init(VIDEO | AUDIO | EVENTS);
+		var scripts:Array<String> = FileSystem.readDirectory('assets/scripts');
+		Sys.println('Available scripts: ${scripts.join(", ")}');
 
-		var w:Window = SDL.createWindow("aea", WindowPos.CENTERED, WindowPos.CENTERED, 800, 600, WindowInitFlags.ALLOW_HIGHDPI);
+		var running:Bool =	 true;
 
-		var ev:Event = SDL.makeEvent();
-		var running:Bool = true;
+		while (running){
+			var i:String = Sys.stdin().readLine();
 
-		while (running) {
-			while (SDL.pollEvent(ev) != 0) {
-				switch (ev.ref.type) {
-					case QUIT:
-						running = false;
-					case _:
-				}
+			if (!scripts.contains(i)){
+				Sys.println('Please use one of the available scripts.');
+			} else {
+				new Interp().execute(new Parser().parseString(File.getContent('assets/scripts/$i')));
+				running = false;
 			}
 		}
-
-        SDL.destroyWindow(w);
-		SDL.quit();
 	}
 }
