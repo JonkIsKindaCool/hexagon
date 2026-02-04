@@ -39,9 +39,120 @@ class HexagonCLI {
 				test(args[1]);
 			case "setup":
 				setup();
+			case "display":
+				generateDisplayFile(args[1] != null ? args[1] : "interp");
 		}
 
 		Sys.setCwd(oldCwd);
+	}
+
+	private static function generateDisplayFile(target:String):Void {
+		data = Json.parse(File.getContent("hexagon.json"));
+		paths = data.paths;
+		build = data.build;
+		defines = data.defines;
+		macros = data.macros;
+		dependencies = data.dependencies;
+
+		applicationTemplate = "package;\n" + 'import ${build.main};\n' + "class ApplicationMain {\n" + "   public static function main(){\n"
+			+ '        new ${build.main}();\n' + "   }\n" + "}\n";
+
+		if (!FileSystem.exists(paths.export))
+			FileSystem.createDirectory(paths.export);
+
+		if (!FileSystem.exists(paths.export + '/helper'))
+			FileSystem.createDirectory(paths.export + '/helper');
+
+		File.saveContent(paths.export + '/helper/ApplicationMain.hx', applicationTemplate);
+
+		var lines:Array<String> = [];
+
+		lines.push('# Hexagon Display Configuration for ${target}');
+		lines.push('# Auto-generated - Do not edit manually');
+		lines.push('');
+
+		lines.push('-cp ${paths.export}/helper');
+		for (classPath in paths.source) {
+			lines.push('-cp $classPath');
+		}
+		lines.push('');
+
+		if (dependencies != null && dependencies.length > 0) {
+			for (d in dependencies) {
+				if (d.version != null) {
+					lines.push('-lib ${d.name}:${d.version}');
+				} else {
+					lines.push('-lib ${d.name}');
+				}
+			}
+			lines.push('');
+		}
+
+		if (defines != null && defines.length > 0) {
+			for (def in defines) {
+				lines.push('-D $def');
+			}
+			lines.push('');
+		}
+
+		if (macros != null && macros.length > 0) {
+			for (m in macros) {
+				lines.push('--macro $m');
+			}
+			lines.push('');
+		}
+
+		if (build.dce != null) {
+			lines.push('--dce ${build.dce}');
+		}
+
+		if (build.debug == true) {
+			lines.push('--debug');
+		}
+
+		if (build.verbose == true) {
+			lines.push('--verbose');
+		}
+
+		if (build.optimize != null) {
+			if (build.optimize) {
+				lines.push('--no-opt');
+			}
+		}
+
+		lines.push('');
+		lines.push('-main ApplicationMain');
+		lines.push('');
+
+		switch (target) {
+			case "hl", "hashlink":
+				lines.push('--hl ${Path.join([paths.export, target, data.name + ".hl"])}');
+			case "js", "javascript":
+				lines.push('--js ${Path.join([paths.export, target, data.name + ".js"])}');
+			case "cpp", "linux", "mac", "windows":
+				lines.push('--cpp ${Path.join([paths.export, target, "haxe"])}');
+				if (target == "linux")
+					lines.push('-D linux');
+				if (target == "mac")
+					lines.push('-D mac');
+				if (target == "windows")
+					lines.push('-D windows');
+			case "cs", "csharp":
+				lines.push('--cs ${Path.join([paths.export, target, "haxe"])}');
+			case "jvm", "java":
+				lines.push('--jvm ${Path.join([paths.export, target, data.name + ".jar"])}');
+			case "python", "py":
+				lines.push('--python ${Path.join([paths.export, target, data.name + ".py"])}');
+			case "lua":
+				lines.push('--lua ${Path.join([paths.export, target, data.name + ".lua"])}');
+			case "neko":
+				lines.push('--neko ${Path.join([paths.export, target, data.name + ".n"])}');
+			default:
+				lines.push('--interp');
+		}
+
+		File.saveContent(Path.join([paths.export, 'helper', 'build_${target}.hxml']), lines.join('\n'));
+		Sys.println('Generated ${paths.export}/helper/build_${target}.hxml');
 	}
 
 	private static function addDefines(args:Array<String>, haxeParams:Array<String>) {
@@ -54,7 +165,7 @@ class HexagonCLI {
 	}
 
 	private static function buildApp(target:String) {
-		data = Json.parse(File.getContent("build.json"));
+		data = Json.parse(File.getContent("hexagon.json"));
 
 		paths = data.paths;
 		build = data.build;
@@ -146,6 +257,8 @@ class HexagonCLI {
 		haxeParams.push("--main");
 		haxeParams.push("ApplicationMain");
 
+		var targetPath:String = Path.join([paths.export, target]);
+
 		switch (target) {
 			case 'hl', 'hashlink':
 				haxeParams.push("--hl");
@@ -163,6 +276,8 @@ class HexagonCLI {
 
 				haxeParams.push("--cpp");
 				haxeParams.push(haxePath);
+
+				targetPath = binPath;
 
 				switch (target) {
 					case "linux":
@@ -233,6 +348,47 @@ class HexagonCLI {
 			case 'eval', 'interp', 'run':
 				haxeParams.push("--interp");
 				Sys.command("haxe", haxeParams);
+		}
+
+		if (target != 'eval' && target != 'interp' && target != 'run') {
+			copyAssets(targetPath);
+		}
+	}
+
+	private static function copyAssets(targetPath:String):Void {
+		if (paths.assets == null || paths.assets.length == 0)
+			return;
+
+		for (assetDir in paths.assets) {
+			if (!FileSystem.exists(assetDir)) {
+				Sys.println('Warning: Asset directory not found: $assetDir');
+				continue;
+			}
+
+			var destDir = Path.join([targetPath, Path.withoutDirectory(assetDir)]);
+
+			if (!FileSystem.exists(destDir)) {
+				FileSystem.createDirectory(destDir);
+			}
+
+			copyDirectory(assetDir, destDir);
+		}
+	}
+
+	private static function copyDirectory(source:String, destination:String):Void {
+		if (!FileSystem.exists(destination)) {
+			FileSystem.createDirectory(destination);
+		}
+
+		for (file in FileSystem.readDirectory(source)) {
+			var srcPath = Path.join([source, file]);
+			var dstPath = Path.join([destination, file]);
+
+			if (FileSystem.isDirectory(srcPath)) {
+				copyDirectory(srcPath, dstPath);
+			} else {
+				File.saveBytes(dstPath, File.getBytes(srcPath));
+			}
 		}
 	}
 

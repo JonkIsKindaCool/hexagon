@@ -36,7 +36,7 @@ class Main {
     }
 }
 ``` 
-You need a build.json file in your project
+You need a hexagon.json file in your project
 ## Build Parameters
 ```
 name: String
