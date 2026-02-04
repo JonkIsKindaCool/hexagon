@@ -5,8 +5,12 @@ A Simple build tool for haxe, inspired in lime's configuration file (Project.xml
 
 
 ## Setup
+Install the vscode extension called hexagon (hexagon-vscode-1.0.0.vsix)
+```
+https://github.com/JonkIsKindaCool/vs-hexagon
+```
 
-First you need to install the library, using 
+Install the library, using 
 ```
 haxelib install hexagon
 ```
@@ -15,7 +19,7 @@ Then you need to setup the command alias (hexagon)
 haxelib run hexagon setup
 ```
 ## Usage
-Hexagon only has 2 commands 
+Hexagon has 2 main commands 
 ```
 haxegon build (target) [-defines]
 ``` 
