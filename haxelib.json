@@ -1,14 +1,14 @@
 {
     "name": "hexagon",
-    "url": "https://github.com/jasononeil/useless/",
+    "url": "https://github.com/JonkIsKindaCool/hexagon/",
     "license": "MIT",
     "tags": [
         "cross"
     ],
     "description": "A Build tool for haxe, inspired in lime's configuration file.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "classPath": "",
-    "releasenote": "Initial release.",
+    "releasenote": "Using global in the alias command.",
     "contributors": [
         "JonkIsKindaCool"
     ],

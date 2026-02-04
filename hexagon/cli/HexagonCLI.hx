@@ -31,23 +31,6 @@ class HexagonCLI {
 
 		systemName = Sys.systemName();
 
-		data = Json.parse(File.getContent("build.json"));
-
-		paths = data.paths;
-		build = data.build;
-		defines = data.defines;
-		macros = data.macros;
-		dependencies = data.dependencies;
-
-		applicationTemplate = {"package;\n"
-			+ 'import ${build.main};\n'
-			+ "class ApplicationMain {\n"
-			+ "   public static function main(){\n"
-			+ '        new ${build.main}();\n'
-			+ "   }\n"
-			+ "}\n";
-		};
-
 		switch (args[0]) {
 			case "build":
 				buildApp(args[1]);
@@ -71,6 +54,23 @@ class HexagonCLI {
 	}
 
 	private static function buildApp(target:String) {
+		data = Json.parse(File.getContent("build.json"));
+
+		paths = data.paths;
+		build = data.build;
+		defines = data.defines;
+		macros = data.macros;
+		dependencies = data.dependencies;
+
+		applicationTemplate = {"package;\n"
+			+ 'import ${build.main};\n'
+			+ "class ApplicationMain {\n"
+			+ "   public static function main(){\n"
+			+ '        new ${build.main}();\n'
+			+ "   }\n"
+			+ "}\n";
+		};
+
 		if (!FileSystem.exists(paths.export))
 			FileSystem.createDirectory(paths.export);
 
@@ -163,7 +163,7 @@ class HexagonCLI {
 
 				haxeParams.push("--cpp");
 				haxeParams.push(haxePath);
-				
+
 				switch (target) {
 					case "linux":
 						haxeParams.push("-D");
@@ -183,14 +183,12 @@ class HexagonCLI {
 
 				var exeName = switch (target) {
 					case "windows": '${data.name}.exe';
-					case "linux", "mac", "cpp":
-						target == "cpp" && systemName == "Windows" ? '${data.name}.exe' : data.name;
+					case "linux", "mac", "cpp": target == "cpp" && systemName == "Windows" ? '${data.name}.exe' : data.name;
 					default: data.name;
 				}
 
-				var haxeThing:String = target == "windows" || (target == "cpp" && systemName == "Windows") 
-					? Path.join([haxePath, 'ApplicationMain.exe']) 
-					: Path.join([haxePath, 'ApplicationMain']);
+				var haxeThing:String = target == "windows"
+					|| (target == "cpp" && systemName == "Windows") ? Path.join([haxePath, 'ApplicationMain.exe']) : Path.join([haxePath, 'ApplicationMain']);
 				var binThing:String = Path.join([binPath, exeName]);
 
 				File.saveBytes(binThing, File.getBytes(haxeThing));
@@ -250,20 +248,19 @@ class HexagonCLI {
 
 			case 'cpp', 'linux', 'mac', 'windows':
 				Sys.setCwd(Path.join([path, paths.export, target, 'bin']));
-				
+
 				var exeName = switch (target) {
 					case "windows": '${data.name}.exe';
-					case "linux", "mac", "cpp":
-						target == "cpp" && systemName == "Windows" ? '${data.name}.exe' : data.name;
+					case "linux", "mac", "cpp": target == "cpp" && systemName == "Windows" ? '${data.name}.exe' : data.name;
 					default: data.name;
 				}
-				
+
 				var exePath = Path.join([path, paths.export, target, 'bin', exeName]);
-				
+
 				if (target != "windows" && !(target == "cpp" && systemName == "Windows")) {
 					Sys.command("chmod", ["+x", exePath]);
 				}
-				
+
 				Sys.command('./$exeName');
 
 			case 'jvm', 'java':
@@ -314,16 +311,16 @@ class HexagonCLI {
 			haxePath = haxePath.trim();
 		}
 
-		File.saveContent(Path.join([haxePath, 'hexagon.bat']), '@echo off\nhaxelib run hexagon %*');
+		File.saveContent(Path.join([haxePath, 'hexagon.bat']), '@echo off\nhaxelib --global run hexagon %*');
 	}
 
 	private static function installUnixAlias(useSudo:Bool):Void {
 		var sudo = useSudo ? 'sudo ' : '';
 		var dest = '/usr/local/bin/hexagon';
-		
-		var scriptContent = '#!/bin/bash\nhaxelib run hexagon "$@"';
+
+		var scriptContent = '#!/bin/bash\nhaxelib --global run hexagon "$@"';
 		var tempFile = '/tmp/hexagon_install.sh';
-		
+
 		File.saveContent(tempFile, scriptContent);
 		Sys.command('${sudo}mv $tempFile $dest');
 		Sys.command('${sudo}chmod 755 $dest');
