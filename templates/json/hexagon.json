@@ -11,18 +11,11 @@
         ],
         "export": "export"
     },
-
     "build": {
         "debug": false,
         "verbose": false,
         "optimize": false,
         "main": "Main",
-        "dce": "full"
-    },
-
-    "dependencies":[
-        {
-            "name": "hscript"
-        }
-    ]
+        "dce": "no"
+    }
 }

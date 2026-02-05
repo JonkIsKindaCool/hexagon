@@ -1,2 +1,2 @@
-test/export/
-test/.vscode/
+templates/json/.vscode
+templates/json/export

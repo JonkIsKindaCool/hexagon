@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hexagon>
+    <project name="Hexagon Test" version="1.0.0" author="Jonk"></project>
+    <export path="export"></export>
+    <build main="Main" debug="false" verbose="false" dce="full" optimize="false"></build>
+
+    <assets path="assets"></assets>
+    <source path="src"></source>
+</hexagon>

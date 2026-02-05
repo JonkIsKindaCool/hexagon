@@ -8,7 +8,7 @@ typedef HexagonData = {
 	author:String,
     paths: HexagonPaths,
     build: HexagonBuild,
-    dependencies: HexagonDependencies,
+    ?dependencies: HexagonDependencies,
     ?defines: Array<String>,
     ?macros: Array<String>
 }

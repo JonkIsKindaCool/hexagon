@@ -1,5 +1,6 @@
 package hexagon.cli;
 
+import haxe.display.Position.Range;
 import haxe.io.Path;
 import sys.FileSystem;
 import sys.io.File;
@@ -46,16 +47,124 @@ class HexagonCLI {
 		Sys.setCwd(oldCwd);
 	}
 
+	private static function loadFile():HexagonData {
+		if (FileSystem.exists('hexagon.xml')) {
+			var xml:Xml = Xml.parse(File.getContent("hexagon.json")).firstChild();
+			var data:HexagonData = {
+				name: null,
+				version: null,
+				author: null,
+				paths: {
+					assets: [],
+					source: [],
+					export: null
+				},
+				build: {
+					main: null
+				},
+				dependencies: [],
+				defines: [],
+				macros: []
+			}
+
+			var hasProject:Bool = false;
+			for (project in xml.elementsNamed("project")) {
+				data.name = project.get("name");
+				data.version = project.get("version");
+				data.author = project.get("author");
+				hasProject = true;
+				break;
+			}
+
+			if (!hasProject)
+				throw "hexagon.xml should have a project element";
+
+			var hasExport:Bool = false;
+			for (export in xml.elementsNamed("export")) {
+				data.paths.export = export.get("path");
+				hasExport = true;
+				break;
+			}
+
+			if (!hasExport)
+				throw "hexagon.xml should have a export element";
+
+			var hasBuild:Bool = false;
+			for (build in xml.elementsNamed("build")) {
+				data.build.main = build.get("main");
+
+				if (build.exists("debug"))
+					data.build.debug = build.get("debug") == "true";
+
+				if (build.exists("verbose"))
+					data.build.verbose = build.get("verbose") == "true";
+
+				if (build.exists("optimize"))
+					data.build.verbose = build.get("optimize") == "true";
+
+				if (build.exists("dce"))
+					data.build.dce = build.get("dce");
+
+				hasBuild = true;
+				break;
+			}
+
+			if (!hasBuild)
+				throw "hexagon.xml should have a build element";
+
+			for (asset in xml.elementsNamed("assets")) {
+				data.paths.assets.push(asset.get("path"));
+			}
+
+			for (source in xml.elementsNamed("source")) {
+				data.paths.source.push(source.get("path"));
+			}
+
+			for (dep in xml.elementsNamed("dependency")) {
+				final dependency:HexagonDependency = {
+					name: dep.get("name")
+				}
+
+				if (dep.exists("version"))
+					dependency.version = dep.get("version");
+
+				data.dependencies.push(dependency);
+			}
+
+			for (def in xml.elementsNamed("define")) {
+				data.defines.push(def.get("value"));
+			}
+
+			for (mac in xml.elementsNamed("macro")) {
+				data.macros.push(mac.get("value"));
+			}
+
+			return data;
+		}
+
+		return Json.parse(File.getContent("hexagon.json"));
+	}
+
 	private static function generateDisplayFile(target:String):Void {
-		data = Json.parse(File.getContent("hexagon.json"));
+		data = loadFile();
 		paths = data.paths;
 		build = data.build;
 		defines = data.defines;
 		macros = data.macros;
-		dependencies = data.dependencies;
+		dependencies = data.dependencies ?? [];
+		dependencies.push({name: "hexagon"});
 
-		applicationTemplate = "package;\n" + 'import ${build.main};\n' + "class ApplicationMain {\n" + "   public static function main(){\n"
-			+ '        new ${build.main}();\n' + "   }\n" + "}\n";
+		applicationTemplate = {"package;\n"
+			+ 'import ${build.main};\n'
+			+ "class ApplicationMain {\n"
+			+ "	  public static var compilingData:String = '"
+			+ Json.stringify(data)
+			+ "';\n"
+			+ "   public static function main(){\n"
+			+ '        new ${build.main}();\n'
+			+ "   }\n"
+			+ "}\n";
+		};
 
 		if (!FileSystem.exists(paths.export))
 			FileSystem.createDirectory(paths.export);
@@ -67,13 +176,9 @@ class HexagonCLI {
 
 		var lines:Array<String> = [];
 
-		lines.push('# Hexagon Display Configuration for ${target}');
-		lines.push('# Auto-generated - Do not edit manually');
-		lines.push('');
-
-		lines.push('-cp ${paths.export}/helper');
+		lines.push('--class-path ${paths.export}/helper');
 		for (classPath in paths.source) {
-			lines.push('-cp $classPath');
+			lines.push('--class-path $classPath');
 		}
 		lines.push('');
 
@@ -147,7 +252,7 @@ class HexagonCLI {
 				lines.push('--lua ${Path.join([paths.export, target, data.name + ".lua"])}');
 			case "neko":
 				lines.push('--neko ${Path.join([paths.export, target, data.name + ".n"])}');
-			default:
+			case 'eval', 'interp', 'run':
 				lines.push('--interp');
 		}
 
@@ -165,189 +270,34 @@ class HexagonCLI {
 	}
 
 	private static function buildApp(target:String) {
-		data = Json.parse(File.getContent("hexagon.json"));
-
-		paths = data.paths;
-		build = data.build;
-		defines = data.defines;
-		macros = data.macros;
-		dependencies = data.dependencies;
-
-		applicationTemplate = {"package;\n"
-			+ 'import ${build.main};\n'
-			+ "class ApplicationMain {\n"
-			+ "   public static function main(){\n"
-			+ '        new ${build.main}();\n'
-			+ "   }\n"
-			+ "}\n";
-		};
-
-		if (!FileSystem.exists(paths.export))
-			FileSystem.createDirectory(paths.export);
-
-		if (target != "run" && target != "eval" && target != "interp") {
-			if (!FileSystem.exists(paths.export + '/' + target))
-				FileSystem.createDirectory(paths.export + '/' + target);
-		}
-
-		if (!FileSystem.exists(paths.export + '/helper'))
-			FileSystem.createDirectory(paths.export + '/helper');
-
-		File.saveContent(paths.export + '/helper/ApplicationMain.hx', applicationTemplate);
-
-		var haxeParams:Array<String> = [];
-
-		haxeParams.push("--class-path");
-		haxeParams.push(paths.export + '/helper');
-
-		for (classPath in paths.source) {
-			haxeParams.push("--class-path");
-			haxeParams.push(classPath);
-		}
-
-		for (d in dependencies) {
-			haxeParams.push("--library");
-
-			if (d.version != null) {
-				haxeParams.push('${d.name}:${d.version}');
-			} else {
-				haxeParams.push('${d.name}');
-			}
-		}
-
-		if (build.dce != null) {
-			haxeParams.push("--dce");
-			haxeParams.push(build.dce);
-		}
-
-		if (build.debug != null) {
-			if (build.debug) {
-				haxeParams.push("--debug");
-			}
-		}
-
-		if (build.verbose != null) {
-			if (build.verbose) {
-				haxeParams.push("--verbose");
-			}
-		}
-
-		if (build.optimize != null) {
-			if (build.optimize) {
-				haxeParams.push("--no-opt");
-			}
-		}
-
-		if (defines != null) {
-			for (d in defines) {
-				haxeParams.push("--define");
-				haxeParams.push(d);
-			}
-		}
-
-		addDefines(args, haxeParams);
-
-		if (macros != null) {
-			for (m in macros) {
-				haxeParams.push("--macro");
-				haxeParams.push(m);
-			}
-		}
-
-		haxeParams.push("--main");
-		haxeParams.push("ApplicationMain");
-
+		generateDisplayFile(target);
+		var targetHXML:String = Path.join([paths.export, 'helper', 'build_${target}.hxml']);
 		var targetPath:String = Path.join([paths.export, target]);
 
-		switch (target) {
-			case 'hl', 'hashlink':
-				haxeParams.push("--hl");
-				haxeParams.push(Path.join([paths.export, target, '${data.name}.hl']));
-				Sys.command("haxe", haxeParams);
+		trace(targetHXML);
 
-			case 'js', 'javascript':
-				haxeParams.push("--js");
-				haxeParams.push(Path.join([paths.export, target, '${data.name}.js']));
-				Sys.command("haxe", haxeParams);
+		Sys.command('haxe', [targetHXML]);
 
-			case "cpp", "linux", "mac", "windows":
-				var haxePath:String = Path.join([paths.export, target, 'haxe']);
-				var binPath:String = Path.join([paths.export, target, 'bin']);
+		if (["cpp", "windows", "mac", "linux"].contains(target)) {
+			var haxePath:String = Path.join([paths.export, target, 'haxe']);
+			var binPath:String = Path.join([paths.export, target, 'bin']);
 
-				haxeParams.push("--cpp");
-				haxeParams.push(haxePath);
+			targetPath = binPath;
 
-				targetPath = binPath;
+			if (!FileSystem.exists(binPath))
+				FileSystem.createDirectory(binPath);
 
-				switch (target) {
-					case "linux":
-						haxeParams.push("-D");
-						haxeParams.push("linux");
-					case "mac":
-						haxeParams.push("-D");
-						haxeParams.push("mac");
-					case "windows":
-						haxeParams.push("-D");
-						haxeParams.push("windows");
-				}
+			var exeName = switch (target) {
+				case "windows": '${data.name}.exe';
+				case "linux", "mac", "cpp": target == "cpp" && systemName == "Windows" ? '${data.name}.exe' : data.name;
+				default: data.name;
+			}
 
-				Sys.command("haxe", haxeParams);
+			var haxeThing:String = target == "windows"
+				|| (target == "cpp" && systemName == "Windows") ? Path.join([haxePath, 'ApplicationMain.exe']) : Path.join([haxePath, 'ApplicationMain']);
+			var binThing:String = Path.join([binPath, exeName]);
 
-				if (!FileSystem.exists(binPath))
-					FileSystem.createDirectory(binPath);
-
-				var exeName = switch (target) {
-					case "windows": '${data.name}.exe';
-					case "linux", "mac", "cpp": target == "cpp" && systemName == "Windows" ? '${data.name}.exe' : data.name;
-					default: data.name;
-				}
-
-				var haxeThing:String = target == "windows"
-					|| (target == "cpp" && systemName == "Windows") ? Path.join([haxePath, 'ApplicationMain.exe']) : Path.join([haxePath, 'ApplicationMain']);
-				var binThing:String = Path.join([binPath, exeName]);
-
-				File.saveBytes(binThing, File.getBytes(haxeThing));
-
-			case 'cs', 'csharp':
-				var haxePath:String = Path.join([paths.export, target, 'haxe']);
-				var binPath:String = Path.join([paths.export, target, 'bin']);
-
-				haxeParams.push("--cs");
-				haxeParams.push(haxePath);
-
-				Sys.command("haxe", haxeParams);
-
-				if (!FileSystem.exists(binPath))
-					FileSystem.createDirectory(binPath);
-
-				var haxeThing:String = systemName == "Windows" ? Path.join([haxePath, 'bin', 'ApplicationMain.exe']) : Path.join([haxePath, 'bin', 'ApplicationMain']);
-				var binThing:String = systemName == "Windows" ? Path.join([binPath, '${data.name}.exe']) : Path.join([binPath, '${data.name}']);
-
-				File.saveBytes(binThing, File.getBytes(haxeThing));
-
-			case 'jvm', 'java':
-				haxeParams.push("--jvm");
-				haxeParams.push(Path.join([paths.export, target, '${data.name}.jar']));
-				Sys.command("haxe", haxeParams);
-
-			case 'python', 'py':
-				haxeParams.push("--python");
-				haxeParams.push(Path.join([paths.export, target, '${data.name}.py']));
-				Sys.command("haxe", haxeParams);
-
-			case 'lua':
-				haxeParams.push("--lua");
-				haxeParams.push(Path.join([paths.export, target, '${data.name}.lua']));
-				Sys.command("haxe", haxeParams);
-
-			case 'neko':
-				haxeParams.push("--neko");
-				haxeParams.push(Path.join([paths.export, target, '${data.name}.n']));
-				Sys.command("haxe", haxeParams);
-
-			case 'eval', 'interp', 'run':
-				haxeParams.push("--interp");
-				Sys.command("haxe", haxeParams);
+			File.saveBytes(binThing, File.getBytes(haxeThing));
 		}
 
 		if (target != 'eval' && target != 'interp' && target != 'run') {
